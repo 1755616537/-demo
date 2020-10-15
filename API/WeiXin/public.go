@@ -45,6 +45,32 @@ func Get(method string,url string,data map[string]interface{},serial_no string,m
 	body, _ := ioutil.ReadAll(resp.Body)
 	return string(body);
 }
+func GetUrl(method string,url string,data map[string]interface{},serial_no string,mchid string,keypath string)string  {
+	bytesData, _ := json.Marshal(data)
+	fmt.Println(string(bytesData))
+	//string(bytesData)
+	Authorization, _ := GetAuth(method, url, string(bytesData),serial_no,mchid,keypath)
+	//请求头
+	headers := map[string]string{
+		"Content-Type":     "application/json",
+		"Accept":           "application/json",
+		"User-Agent":       "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/535.1 (KHTML, like Gecko) Chrome/14.0.835.163 Safari/535.1",
+		"Authorization":    Authorization,
+		"Wechatpay-Serial": serial_no,
+	}
+	fmt.Println("Authorization",Authorization)
+
+	client := &http.Client{}
+	bytesData2:=bytes.NewReader(bytesData)
+	req,_ := http.NewRequest(method,url,bytesData2)
+	for i, i2 := range headers {
+		req.Header.Add(i,i2)
+	}
+	resp,_ := client.Do(req)
+	defer resp.Body.Close()
+	body, _ := ioutil.ReadAll(resp.Body)
+	return string(body);
+}
 func GetAuth(method, url, body string,serial_no string,mchid string,keypath string) (res string, err error) {
 	Authorization := "WECHATPAY2-SHA256-RSA2048" //固定字符串
 	//mchid := "1602157237" //服务商商户号

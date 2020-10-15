@@ -1,7 +1,7 @@
 package main
 
 import (
-	"4/API/WeiXin/GongZhongHao"
+	"4/API/WeiXin/ZhiFuFen"
 	"fmt"
 )
 
@@ -13,7 +13,7 @@ func main() {
 	//fmt.Println(ret)
 
 	//fmt.Println(GongZhongHao.GetXiaDan())
-	fmt.Println(GongZhongHao.CodeShouQuanHuanQuAccess_token("1"))
+	//fmt.Println(GongZhongHao.CodeShouQuanHuanQuAccess_token("1"))
 
 	//sign:=map[string]string{}
 	////HTTP头Wechatpay-Timestam时间戳
@@ -30,6 +30,9 @@ func main() {
 	//fmt.Println(et,err.Error())
 
 	//fmt.Println(ZhiFuFenHuoQuZhengShu())
+
+	//微信支付分创建订单
+	fmt.Println(ZhiFuFen.ChuangJianZhiFuFenDingDan())
 }
 
 
