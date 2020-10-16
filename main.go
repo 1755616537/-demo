@@ -36,19 +36,24 @@ func main() {
 	//微信支付分创建订单
 	//fmt.Println(ZhiFuFen.ChuangJianZhiFuFenDingDan())
 
+	//JSAPI下单
+	//package2, err :=GongZhongHao.GetXiaDan()
+	//if err!=nil {
+	//	fmt.Println(err.Error())
+	//	return
+	//}
+	//GongZhongHao.GetZhiFu(package2)
+	//return
+
 	//获取平台证书
-	mapret:=GongZhongHao.GetPingTaiZhengShu()
-	fmt.Println("mapret",mapret)
-	gjsonret:=gjson.New(mapret)
+	resbody, jsonRetHeader, err :=GongZhongHao.GetPingTaiZhengShu()
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
 
-	PUBLICKEY:=gjsonret.GetString("data.0.encrypt_certificate.ciphertext")
-	serial_no:=gjsonret.GetString("data.0.serial_no")
-	nonce:=gjsonret.GetString("data.0.encrypt_certificate.nonce")
-	associated_data:=gjsonret.GetString("data.0.encrypt_certificate.associated_data")
-	fmt.Println(PUBLICKEY)
-
-	//微信JSAPI支付回调
-	GongZhongHao.CheckSign2(PUBLICKEY,serial_no,nonce,associated_data)
+	//微信JSAPI支付回调验签
+	fmt.Println(GongZhongHao.CheckSign2(gjson.New(resbody),jsonRetHeader))
 }
 
 

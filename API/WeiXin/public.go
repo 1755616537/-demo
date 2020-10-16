@@ -5,6 +5,7 @@ import (
 	"crypto"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
@@ -13,6 +14,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"github.com/gogf/gf/encoding/gjson"
 	"io"
 	"io/ioutil"
 	"log"
@@ -21,12 +23,26 @@ import (
 	"time"
 )
 
-func Get(method string,url string,data map[string]interface{},serial_no string,mchid string,keypath string)string  {
+
+const (
+	//商户号
+	ShangHuHao string="1602157237"
+	//API密钥
+	APIMiYue string = "UJATIMB38cHO5X4ABekT4FZT0V7O0Put"
+	//APIV3密钥
+	APIV3MiYue string = "UJATIMB38cHO5X4ABekT4FZT0V7O0Pv3"
+	//APIV3密钥长度
+	APIV3MiYueLen int =32
+	//商户证书序列号
+	ShanɡHuZhengShuXuLieHao string = "5D0FBDA24CE5BFA1AAA00B375F11A794FD18F233"
+)
+
+func Get(method string,url string,data map[string]interface{},serial_no string,mchid string,keypath string)(http.Header,int,string)  {
 	var bytesData []byte
 	var Authorization string
 	if  data!= nil {
 		bytesData, _ = json.Marshal(data)
-		fmt.Println("bytesData",string(bytesData))
+		fmt.Println("HTTP请求JSON字符串",string(bytesData))
 		Authorization, _ = GetAuth(method, url, string(bytesData),serial_no,mchid,keypath)
 	}else {
 		Authorization, _ = GetAuth(method, url, "",serial_no,mchid,keypath)
@@ -56,7 +72,7 @@ func Get(method string,url string,data map[string]interface{},serial_no string,m
 	resp,_ := client.Do(req)
 	defer resp.Body.Close()
 	body, _ := ioutil.ReadAll(resp.Body)
-	return string(body);
+	return resp.Header,resp.StatusCode,string(body)
 }
 func GetUrl(method string,url string,data map[string]interface{},serial_no string,mchid string,keypath string)string  {
 	bytesData, _ := json.Marshal(data)
@@ -204,4 +220,123 @@ func RsaVerySignWithSha256(data, signData, keyBytes []byte) bool {
 		panic(err)
 	}
 	return true
+}
+
+// 公钥加密
+func RsaEncrypt2(origData,publicKey []byte) ([]byte, error) {
+	block, _ := pem.Decode(publicKey)
+	if block == nil {
+		return nil, errors.New("public key error")
+	}
+	pubInterface, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	pub := pubInterface.(*rsa.PublicKey)
+	return rsa.EncryptPKCS1v15(rand.Reader, pub, origData)
+}
+// 私钥解密
+func RsaDecrypt2(ciphertext,privateKey []byte) ([]byte, error) {
+	block, _ := pem.Decode(privateKey)
+	if block == nil {
+		return nil, errors.New("private key error!")
+	}
+	priv, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	return rsa.DecryptPKCS1v15(rand.Reader, priv, ciphertext)
+}
+//获取商户公钥
+func GetShangHuGongYao()(string,error)  {
+	key, err := ioutil.ReadFile("C:\\Users\\17556\\OneDrive\\文本资料\\宇翔\\微信支付\\证书\\1602157237_20200924_cert/cert.pem")
+	return string(key),err
+}
+//获取商户私钥
+func GetShangHuSiYao()(string,error)  {
+	key, err := ioutil.ReadFile("C:\\Users\\17556\\OneDrive\\文本资料\\宇翔\\微信支付\\证书\\1602157237_20200924_cert/apiclient_key.pem")
+	return string(key),err
+}
+//解密报文
+//original_type 加密前的对象类型
+//algorithm 加密算法
+//ciphertext Base64编码后的密文
+//nonce 加密使用的随机串初始化向量）
+//associated_data 附加数据包（可能为空）
+func JieMiBaoWen(original_type,algorithm,ciphertext,nonce,associated_data string,jsonRetHeader *gjson.Json)(string,error)  {
+	//验证参数是否完整
+	if original_type=="" {
+		//return "",errors.New("original_type 加密前的对象类型 为空")
+	}
+	if algorithm=="" {
+		return "",errors.New("algorithm 加密算法 为空")
+	}
+	if ciphertext=="" {
+		return "",errors.New("ciphertext Base64编码后的密文 为空")
+	}
+	if nonce=="" {
+		return "",errors.New("nonce 加密使用的随机串初始化向量） 为空")
+	}
+
+	//解密
+	switch algorithm {
+	case "AEAD_AES_256_GCM":
+		//data, err := AEAD_AES_256_GCMJieMi(ciphertext, nonce, associated_data)
+		data, err := AEAD_AES_256_GCMJieMi(ciphertext, jsonRetHeader.GetString("Wechatpay-Nonce"), associated_data)
+		if err != nil {
+			return "", err
+		}
+		return data, nil
+	default:
+		return "", errors.New(fmt.Sprint("使用了未定义的加密算法",algorithm))
+	}
+}
+//AEAD_AES_256_GCM解密
+func AEAD_AES_256_GCMJieMi(ciphertext,nonce,associated_data string)(string,error)  {
+	APIV3MiYue, err :=GetAPIV3MiYue()
+	if err != nil {
+		return "", err
+	}
+	block, err := aes.NewCipher([]byte(APIV3MiYue))
+	if err != nil {
+		return "", err
+	}
+	aesgcm, err := cipher.NewGCMWithNonceSize(block, len(nonce))
+	if err != nil {
+		return "", err
+	}
+	cipherdata, err := base64.StdEncoding.DecodeString(ciphertext)
+	if err != nil {
+		return "", err
+	}
+	plaindata, err := aesgcm.Open(nil, []byte(nonce), cipherdata, []byte(associated_data))
+	if err != nil {
+		return "", err
+	}
+	return string(plaindata), nil
+}
+//获取APIV3密钥
+func GetAPIV3MiYue()(string,error)  {
+	if len(APIV3MiYue)!=APIV3MiYueLen {
+		return "",errors.New("APIV3密钥长度不足32位")
+	}
+	return APIV3MiYue,nil
+}
+//证书取公钥
+func GetZhengShuQuGongYao(ZhengShu string)(string,error)  {
+	block, _ := pem.Decode([]byte(ZhengShu))
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return "", err
+	}
+	publicKeyDer, err := x509.MarshalPKIXPublicKey(cert.PublicKey)
+	if err != nil {
+		return "", err
+	}
+	publicKeyBlock := pem.Block{
+		Type:  "PUBLIC KEY",
+		Bytes: publicKeyDer,
+	}
+	publicKeyPem := string(pem.EncodeToMemory(&publicKeyBlock))
+	return publicKeyPem, nil
 }

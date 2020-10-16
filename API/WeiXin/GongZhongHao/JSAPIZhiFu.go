@@ -3,6 +3,9 @@ package GongZhongHao
 import (
 	"4/API/WeiXin"
 	"crypto"
+	"crypto/dsa"
+	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
@@ -11,40 +14,52 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"github.com/gogf/gf/encoding/gjson"
 	"strconv"
 	"time"
 )
 
 //JSAPI支付下单
-func GetXiaDan() string {
+func GetXiaDan() (string, error) {
 	method := "POST"
 	url := "/v3/pay/transactions/jsapi"
 	data := make(map[string]interface{})
+	//公众号ID
 	data["appid"] = "wx32238000bf89db68"
+	//直连商户号
 	data["mchid"] = "1602157237"
+	//商品描述
 	data["description"] = "广西-机柜1-苹果 "
-	data["out_trade_no"] = "1217752501201407033233368020"
+	//商户订单号
+	data["out_trade_no"] = "1217752501201407033233368021"
+	//通知地址
 	data["notify_url"] = "https://m-store.com.cn/lingshou/wx/callback/pay_notify"
+	//订单金额
 	amount := make(map[string]interface{})
+	//总金额
 	amount["total"] = 1
+	//货币类型
 	amount["currency"] = "CNY"
 	data["amount"] = amount
+	//支付者
 	payer := make(map[string]interface{})
+	//用户标识
 	payer["openid"] = "oIbBd6DlJZ1uURUq1w3BwEAuk-xo"
 	data["payer"] = payer
 
-	packageString := WeiXin.Get(method, url, data, "5D0FBDA24CE5BFA1AAA00B375F11A794FD18F233", "1602157237", "C:\\Users\\Administrator\\OneDrive\\文本资料\\宇翔\\微信支付\\证书\\1602157237_20200924_cert/apiclient_key.pem")
+	//Administrator
+	_, _, packageString := WeiXin.Get(method, url, data, "5D0FBDA24CE5BFA1AAA00B375F11A794FD18F233", "1602157237", "C:\\Users\\17556\\OneDrive\\文本资料\\宇翔\\微信支付\\证书\\1602157237_20200924_cert/apiclient_key.pem")
 	fmt.Println("JSAPI下单", packageString)
 
 	packageJson := make(map[string]interface{})
 	err := json.Unmarshal([]byte(packageString), &packageJson)
 	if err != nil {
 		fmt.Println(err)
-		return ""
+		return "", err
 	}
 	package2 := fmt.Sprintln(packageJson["prepay_id"])
 	//package2:="wx25123031790770b381e781da1301dc0000"
-	return package2
+	return package2, nil
 }
 
 //JSAPI支付
@@ -53,24 +68,67 @@ func GetZhiFu(package2 string) {
 	nonce_str := "1YjQ56C6lwFcWO17s9LFYxzbYX0M38b1"       //32位随机字符串
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10) //时间戳
 	fmt.Println("JSAPI支付时间戳", timestamp)
-	signature, _ := WeiXin.SignJSAPI(appId, timestamp, nonce_str, "prepay_id="+package2, "C:\\Users\\Administrator\\OneDrive\\文本资料\\宇翔\\微信支付\\证书\\1602157237_20200924_cert/apiclient_key.pem")
+	signature, _ := WeiXin.SignJSAPI(appId, timestamp, nonce_str, "prepay_id="+package2, "C:\\Users\\17556\\OneDrive\\文本资料\\宇翔\\微信支付\\证书\\1602157237_20200924_cert/apiclient_key.pem")
 	fmt.Println("JSAPI支付签名", signature)
 }
 
 //获取平台证书
-func GetPingTaiZhengShu()map[string]interface{}  {
-	packageString := WeiXin.Get("GET", "/v3/certificates", nil, "5D0FBDA24CE5BFA1AAA00B375F11A794FD18F233", "1602157237", "C:\\Users\\Administrator\\OneDrive\\文本资料\\宇翔\\微信支付\\证书\\1602157237_20200924_cert/apiclient_key.pem")
-	fmt.Println("packageString",packageString)
-	packageJson := make(map[string]interface{})
-	err := json.Unmarshal([]byte(packageString), &packageJson)
-	if err != nil {
-		fmt.Println(err)
-		return nil
+func GetPingTaiZhengShu() (map[string]interface{},*gjson.Json, error) {
+	//packageString := WeiXin.Get("GET", "/v3/certificates", nil, "5D0FBDA24CE5BFA1AAA00B375F11A794FD18F233", "1602157237", "C:\\Users\\Administrator\\OneDrive\\文本资料\\宇翔\\微信支付\\证书\\1602157237_20200924_cert/apiclient_key.pem")
+	resHeader, resStatusCode, resbody := WeiXin.Get("GET", "/v3/certificates", nil, "5D0FBDA24CE5BFA1AAA00B375F11A794FD18F233", "1602157237", "C:\\Users\\17556\\OneDrive\\文本资料\\宇翔\\微信支付\\证书\\1602157237_20200924_cert/apiclient_key.pem")
+	fmt.Println("获取平台证书", "Header", resHeader)
+	//转换格式
+	jsonRetBody := gjson.New(resbody)
+	jsonRetHeader := gjson.New(resHeader)
+	//验证头部信息是否完整
+	WechatpayNonce := jsonRetHeader.GetString("Wechatpay-Nonce")
+	WechatpaySerial := jsonRetHeader.GetString("Wechatpay-Serial")
+	WechatpaySignature := jsonRetHeader.GetString("Wechatpay-Signature")
+	WechatpayTimestamp := jsonRetHeader.GetString("Wechatpay-Timestamp")
+	if WechatpayNonce == "" || WechatpaySerial == "" || WechatpaySignature == "" || WechatpayTimestamp == "" {
+		return nil,nil, errors.New("请求的平台证书头部信息不完整")
 	}
-	return packageJson
+
+	if jsonRetBody.Get("code") != nil {
+		return nil,nil, errors.New(fmt.Sprint(jsonRetBody.GetString("code"), jsonRetBody.GetString("message")))
+	}
+	if resStatusCode != 200 {
+		return nil,nil, errors.New(fmt.Sprint("请求StatusCode异常", resStatusCode))
+	}
+	fmt.Println("获取平台证书", "HTTP请求结果", resbody)
+	packageJson := make(map[string]interface{})
+	err := json.Unmarshal([]byte(resbody), &packageJson)
+	if err != nil {
+		return nil,nil, err
+	}
+	return packageJson,jsonRetHeader, nil
 }
 
-func CheckSign2(PUBLICKEY,serial_no,nonce,associated_data string) {
+//获取指定平台证书
+//需要传递（获取平台证书返回的数据的jsonresbody类型数据）
+func GetZhiDingPingTaiZhengShu(serial_no string, PingTaiZhengShuList,jsonRetHeader *gjson.Json) (string, string, error) {
+	for i := 0; i < len(PingTaiZhengShuList.GetArray("data")); i++ {
+		dataSerial_no := PingTaiZhengShuList.GetString(fmt.Sprint("data.", i, ".serial_no"))
+		dataAlgorithm := PingTaiZhengShuList.GetString(fmt.Sprint("data.", i, ".encrypt_certificate.algorithm"))
+		dataNonce := PingTaiZhengShuList.GetString(fmt.Sprint("data.", i, ".encrypt_certificate.nonce"))
+		dataAssociated_data := PingTaiZhengShuList.GetString(fmt.Sprint("data.", i, ".encrypt_certificate.associated_data"))
+		dataCiphertext := PingTaiZhengShuList.GetString(fmt.Sprint("data.", i, ".encrypt_certificate.ciphertext"))
+		if dataSerial_no == "" || dataAlgorithm == "" || dataNonce == "" || dataAssociated_data == "" || dataCiphertext == "" {
+			fmt.Println("平台证书", i, "缺少参数")
+			continue
+		}
+		if serial_no == dataSerial_no {
+			data, err := WeiXin.JieMiBaoWen("", dataAlgorithm, dataCiphertext, dataNonce, dataAssociated_data,jsonRetHeader)
+			if err != nil {
+				return "", "", err
+			}
+			return data, PingTaiZhengShuList.GetString(fmt.Sprint("data.", i)), nil
+		}
+	}
+	return "", "", errors.New(fmt.Sprint("获取指定平台证书", "找不到对应证书", serial_no))
+}
+
+func CheckSign2(PingTaiZhengShuList,jsonRetHeader *gjson.Json) error {
 	sign := map[string]string{}
 	//HTTP头Wechatpay-Timestam时间戳
 	sign["timestamp"] = "1601034297"
@@ -89,21 +147,28 @@ func CheckSign2(PUBLICKEY,serial_no,nonce,associated_data string) {
 	//sign["signature"] = "Vtqzoo//yaSUsODWWcAnNaIGCs3qEWPTvAzztF/kik+JGx10r+LAvsA6z+YtGFVbUHve/CivGvcq9xwy069gYUol52IpsnaIIAgEdxZxLOdEjb/WscaUJMfOnXnuqPqts+LibfmztAdDFtX1lVt6ytnv0ntiwAXnY2RQkAHhMMO9cghFvnQfe53dXwtMOCD/qGHdMxWevekvYXoDiid2+sk0Wuf6HrNulVbIDr6BCjx68JkCQgqXwXFgdn9ZyZePif6oK317rZAYI36UikSpRqgy+VbldHhvzqZuvHOfzGFoav/EjiD1qd34Cm5r5yODVKoXAV1RtPoMfYNWYoYiTg=="
 	//sign["wxSerial"] = "3BE8D7D58A068970391BEBD6D77640D5DE7CE668"
 
+	//获取指定平台证书
+	PingTaiZhengShuData, dataPingTaiZhengShu, err := GetZhiDingPingTaiZhengShu(sign["wxSerial"], PingTaiZhengShuList,jsonRetHeader)
+	if err != nil {
+		return err
+	}
+	jsonDataPingTaiZhengShu := gjson.New(dataPingTaiZhengShu)
 	//请求类型
 	sign["method"] = "POST"
-	et, err := CheckSign(
+	res, err := CheckSign(
 		sign,
-		serial_no,
-		PUBLICKEY,
-		nonce,
-		associated_data,
+		jsonDataPingTaiZhengShu.GetString("serial_no"),
+		jsonDataPingTaiZhengShu.GetString("encrypt_certificate.ciphertext"),
+		jsonDataPingTaiZhengShu.GetString("encrypt_certificate.nonce"),
+		jsonDataPingTaiZhengShu.GetString("encrypt_certificate.associated_data"),
+		PingTaiZhengShuData,
 	)
-
-	fmt.Println(et, err.Error())
+	fmt.Println(res, err.Error())
+	return nil
 }
 
 //JSAPI支付回调-取得回复后调用此方法进行签名验证
-func CheckSign(sign map[string]string, serial_no string, PUBLICKEY string,ZHnonce string,ZHassociated_data string) (bool, error) {
+func CheckSign(sign map[string]string, serial_no string, PUBLICKEY string, ZHnonce string, ZHassociated_data string, PingTaiZhengShuData string) (bool, error) {
 
 	//请求类型
 	if sign["method"] != "POST" {
@@ -118,64 +183,73 @@ func CheckSign(sign map[string]string, serial_no string, PUBLICKEY string,ZHnonc
 
 	//验签之前需要先验证平台证书序列号是否正确一致
 	if serial_no != wxSerial {
+		fmt.Println("证书号", serial_no, wxSerial)
 		return false, errors.New("证书号错误或已过期")
 	}
 
 	checkStr := time + "\n" + nonce + "\n" + body + "\n"
+	//解密signature base64
+	signatureB64, err := base64.StdEncoding.DecodeString(signature)
+	if err != nil {
+		return false, err
+	}
+
+	fmt.Println("PingTaiZhengShuData", PingTaiZhengShuData)
+	GongYao, err := WeiXin.GetZhengShuQuGongYao(string(PingTaiZhengShuData))
+	fmt.Println("平台证书公钥", GongYao)
+	if err != nil {
+		return false, err
+	}
 
 	//读证书文件
 	//key, err := ioutil.ReadFile(keypath)
 	//PUBLICKEY="-----BEGIN PUBLIC KEY-----\n"+PUBLICKEY+"\n-----END PUBLIC KEY----"
-	fmt.Println(PUBLICKEY)
-	//解密base64
-	//key, err := base64.StdEncoding.DecodeString(PUBLICKEY)
+	//fmt.Println("PUBLICKEY未B64解密，未sha256解密",PUBLICKEY)
+	////解密base64
+	//PUBLICKEY64, err := base64.StdEncoding.DecodeString(PUBLICKEY)
+	//fmt.Println("PUBLICKEY未sha256解密",PUBLICKEY64)
 	//if err != nil {
 	//	return false, err
 	//}
-	plaintext, _ :=WeiXin.RsaDecrypt(PUBLICKEY,ZHnonce,ZHassociated_data)
+	//privateKey, _ :=WeiXin.GetShangHuSiYao()
+	//fmt.Println("privateKey商户密钥",privateKey)
+	//plaintext, err :=WeiXin.RsaDecrypt2(PUBLICKEY64, []byte(privateKey))
+	//fmt.Println("plaintext解密",plaintext)
+	//plaintextAPI, err :=WeiXin.RsaDecrypt(PUBLICKEY,ZHnonce,ZHassociated_data)
+	//if err != nil {
+	//	fmt.Println("plaintextAPI密钥解密",plaintextAPI)
+	//}
+	//return false, nil
+	//plaintext, _ :=WeiXin.RsaDecrypt(PUBLICKEY,ZHnonce,ZHassociated_data)
 	//fmt.Println("key2",plaintext)
-	//从证书中提取公钥
-	blocks, _ := pem.Decode([]byte(plaintext))
-	if blocks == nil  {
-		return false, errors.New("无法证书")
-	}
-	if blocks.Type!="CERTIFICATE"{
-		return false, errors.New("不是证书")
-	}
-	cert, err := x509.ParseCertificate(blocks.Bytes)
-	if err != nil {
-		return false, err
-	}
-	publicKeyDer, err := x509.MarshalPKIXPublicKey(cert.PublicKey)
-	//fmt.Println("publicKeyDer",string(publicKeyDer))
-	publicKeyBlock := pem.Block{
-		Type:  "PUBLIC KEY",
-		Bytes: publicKeyDer,
-	}
-	publicKeyPem := string(pem.EncodeToMemory(&publicKeyBlock))
+
 	//解析公钥
-	blocks, _ = pem.Decode([]byte(publicKeyPem))
-	if blocks == nil  {
+	blocks, _ := pem.Decode([]byte(GongYao))
+	if blocks == nil {
 		return false, errors.New("无法公钥")
 	}
 	publicKey, err := x509.ParsePKIXPublicKey(blocks.Bytes)
-	//fmt.Println("publicKey", publicKey)
 	if err != nil {
 		return false, err
+	}
+	switch pub := publicKey.(type) {
+	case *rsa.PublicKey:
+		fmt.Println("pub is of type RSA:", pub)
+	case *dsa.PublicKey:
+		fmt.Println("pub is of type DSA:", pub)
+	case *ecdsa.PublicKey:
+		fmt.Println("pub is of type ECDSA:", pub)
+	case ed25519.PublicKey:
+		fmt.Println("pub is of type Ed25519:", pub)
+	default:
 	}
 	//生成散列值
 	hashed := sha256.Sum256([]byte(checkStr))
 	//fmt.Println("hashed", hashed)
-	//解密signature base64
-	oldSign, err := base64.StdEncoding.DecodeString(signature)
-	//fmt.Println("oldSign", oldSign)
-	if err != nil {
-		return false, err
-	}
 	//验签
-	err = rsa.VerifyPKCS1v15(publicKey.(*rsa.PublicKey), crypto.SHA256, hashed[:], oldSign)
+	err = rsa.VerifyPKCS1v15(publicKey.(*rsa.PublicKey), crypto.SHA256, hashed[:], signatureB64)
 	if err != nil {
 		return false, err
 	}
-	return true, err
+	return true, nil
 }
