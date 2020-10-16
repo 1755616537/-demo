@@ -11,7 +11,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -20,10 +22,15 @@ import (
 )
 
 func Get(method string,url string,data map[string]interface{},serial_no string,mchid string,keypath string)string  {
-	bytesData, _ := json.Marshal(data)
-	fmt.Println(string(bytesData))
-	//string(bytesData)
-	Authorization, _ := GetAuth(method, url, string(bytesData),serial_no,mchid,keypath)
+	var bytesData []byte
+	var Authorization string
+	if  data!= nil {
+		bytesData, _ = json.Marshal(data)
+		fmt.Println("bytesData",string(bytesData))
+		Authorization, _ = GetAuth(method, url, string(bytesData),serial_no,mchid,keypath)
+	}else {
+		Authorization, _ = GetAuth(method, url, "",serial_no,mchid,keypath)
+	}
 	//请求头
 	headers := map[string]string{
 		"Content-Type":     "application/json",
@@ -34,8 +41,14 @@ func Get(method string,url string,data map[string]interface{},serial_no string,m
 	}
 	fmt.Println("Authorization",Authorization)
 
+	var bytesData2 io.Reader
 	client := &http.Client{}
-	bytesData2:=bytes.NewReader(bytesData)
+	if data==nil{
+		bytesData2=nil
+	}else {
+		bytesData2=bytes.NewReader(bytesData)
+	}
+
 	req,_ := http.NewRequest(method,"https://api.mch.weixin.qq.com"+url,bytesData2)
 	for i, i2 := range headers {
 		req.Header.Add(i,i2)
@@ -173,4 +186,22 @@ func AesDecrypt(ciphertext string) string {
 
 	log.Println("解密结果：", string(decrypted))
 	return string(decrypted)
+}
+//验证
+func RsaVerySignWithSha256(data, signData, keyBytes []byte) bool {
+	block, _ := pem.Decode(keyBytes)
+	if block == nil {
+		panic(errors.New("public key error"))
+	}
+	pubKey, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		panic(err)
+	}
+
+	hashed := sha256.Sum256(data)
+	err = rsa.VerifyPKCS1v15(pubKey.(*rsa.PublicKey), crypto.SHA256, hashed[:], signData)
+	if err != nil {
+		panic(err)
+	}
+	return true
 }

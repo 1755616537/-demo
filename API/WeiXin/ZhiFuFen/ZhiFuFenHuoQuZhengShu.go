@@ -21,6 +21,7 @@ func ZhiFuFenHuoQuZhengShu()string  {
 	packageString:= WeiXin.Get(method,url,data,"4D14847ECF54E76D07B6AF4882BCA497DD3EBD7A","1555281461","D:\\ZhangGuoBiao\\万物互联网\\万物互联网/apiclient_key.pem");
 	return packageString
 }
+
 //创建支付分订单API
 func ChuangJianZhiFuFenDingDan()string  {
 	//商户服务订单号

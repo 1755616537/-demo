@@ -1,8 +1,10 @@
 package main
 
 import (
-	"4/API/WeiXin/ZhiFuFen"
+	"4/API/WeiXin/GongZhongHao"
 	"fmt"
+	_ "fmt"
+	"github.com/gogf/gf/encoding/gjson"
 )
 
 func main() {
@@ -32,7 +34,22 @@ func main() {
 	//fmt.Println(ZhiFuFenHuoQuZhengShu())
 
 	//微信支付分创建订单
-	fmt.Println(ZhiFuFen.ChuangJianZhiFuFenDingDan())
+	//fmt.Println(ZhiFuFen.ChuangJianZhiFuFenDingDan())
+
+	//获取平台证书
+	mapret:=GongZhongHao.GetPingTaiZhengShu()
+	fmt.Println("mapret",mapret)
+	gjsonret:=gjson.New(mapret)
+
+	PUBLICKEY:=gjsonret.GetString("data.0.encrypt_certificate.ciphertext")
+	serial_no:=gjsonret.GetString("data.0.serial_no")
+	nonce:=gjsonret.GetString("data.0.encrypt_certificate.nonce")
+	associated_data:=gjsonret.GetString("data.0.encrypt_certificate.associated_data")
+	fmt.Println(PUBLICKEY)
+
+	//微信JSAPI支付回调
+	GongZhongHao.CheckSign2(PUBLICKEY,serial_no,nonce,associated_data)
 }
+
 
 
