@@ -5,6 +5,9 @@ import (
 	"crypto"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/dsa"
+	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -14,11 +17,11 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"github.com/gogf/gf/encoding/gjson"
 	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 )
@@ -263,7 +266,7 @@ func GetShangHuSiYao()(string,error)  {
 //ciphertext Base64编码后的密文
 //nonce 加密使用的随机串初始化向量）
 //associated_data 附加数据包（可能为空）
-func JieMiBaoWen(original_type,algorithm,ciphertext,nonce,associated_data string,jsonRetHeader *gjson.Json)(string,error)  {
+func JieMiBaoWen(original_type,algorithm,ciphertext,nonce,associated_data string,resHeader http.Header)(string,error)  {
 	//验证参数是否完整
 	if original_type=="" {
 		//return "",errors.New("original_type 加密前的对象类型 为空")
@@ -281,8 +284,7 @@ func JieMiBaoWen(original_type,algorithm,ciphertext,nonce,associated_data string
 	//解密
 	switch algorithm {
 	case "AEAD_AES_256_GCM":
-		//data, err := AEAD_AES_256_GCMJieMi(ciphertext, nonce, associated_data)
-		data, err := AEAD_AES_256_GCMJieMi(ciphertext, jsonRetHeader.GetString("Wechatpay-Nonce"), associated_data)
+		data, err := AEAD_AES_256_GCMJieMi(ciphertext, nonce, associated_data)
 		if err != nil {
 			return "", err
 		}
@@ -323,20 +325,71 @@ func GetAPIV3MiYue()(string,error)  {
 	return APIV3MiYue,nil
 }
 //证书取公钥
-func GetZhengShuQuGongYao(ZhengShu string)(string,error)  {
+func GetZhengShuQuGongYao(ZhengShu string)(interface{},error)  {
 	block, _ := pem.Decode([]byte(ZhengShu))
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
+	fmt.Println("证书cert.Subject.Names",cert.Subject.Names)
 	publicKeyDer, err := x509.MarshalPKIXPublicKey(cert.PublicKey)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	publicKeyBlock := pem.Block{
 		Type:  "PUBLIC KEY",
 		Bytes: publicKeyDer,
 	}
 	publicKeyPem := string(pem.EncodeToMemory(&publicKeyBlock))
-	return publicKeyPem, nil
+	//解析公钥
+	blocks, _ := pem.Decode([]byte(publicKeyPem))
+	if blocks == nil {
+		return nil, errors.New("无法公钥")
+	}
+	publicKey, err := x509.ParsePKIXPublicKey(blocks.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	switch publicKey.(type) {
+	case *rsa.PublicKey:
+		fmt.Println("publicKeyPem is of type RSA")
+	case *dsa.PublicKey:
+		fmt.Println("publicKeyPem is of type DSA")
+	case *ecdsa.PublicKey:
+		fmt.Println("publicKeyPem is of type ECDSA")
+	case ed25519.PublicKey:
+		fmt.Println("publicKeyPem is of type Ed25519")
+	default:
+	}
+	return publicKey, nil
+}
+//保存文本到文件
+func SetBaoCunWenBenDaoWenJian(data,fileNamem string)error  {
+	dstFile,err := os.Create(fileNamem)
+	if err!=nil{
+		return err
+	}
+	defer dstFile.Close()
+	_, err = dstFile.WriteString(data)
+	if err != nil {
+		return  err
+	}
+	return err
+}
+//读入文件
+func GetDouRuWenJian(fileNamem string)(string,error)  {
+	//_, _ = ioutil.ReadFile(fileNamem)
+	fp, err := os.OpenFile(fileNamem, os.O_CREATE|os.O_APPEND, 6) // 读写方式打开
+	if err != nil {
+		return "", err
+	}
+	// defer延迟调用
+	defer fp.Close()  //关闭文件，释放资源。
+
+	var data []byte
+	_, err= fp.Read(data)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
 }

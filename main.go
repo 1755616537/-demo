@@ -46,14 +46,14 @@ func main() {
 	//return
 
 	//获取平台证书
-	resbody, jsonRetHeader, err :=GongZhongHao.GetPingTaiZhengShu()
+	resbody, resHeader, err :=GongZhongHao.GetPingTaiZhengShu()
 	if err != nil {
 		fmt.Println(err.Error())
 		return
 	}
 
 	//微信JSAPI支付回调验签
-	fmt.Println(GongZhongHao.CheckSign2(gjson.New(resbody),jsonRetHeader))
+	fmt.Println(GongZhongHao.CheckSign2(gjson.New(resbody),resHeader))
 }
 
 
