@@ -40,7 +40,7 @@ const (
 	ShanɡHuZhengShuXuLieHao string = "5D0FBDA24CE5BFA1AAA00B375F11A794FD18F233"
 )
 
-func Get(method string,url string,data map[string]interface{},serial_no string,mchid string,keypath string)(http.Header,int,string)  {
+func Get(method string,url string,data map[string]interface{},serial_no string,mchid string,keypath string)(http.Header,int,string,error)  {
 	var bytesData []byte
 	var Authorization string
 	if  data!= nil {
@@ -68,14 +68,23 @@ func Get(method string,url string,data map[string]interface{},serial_no string,m
 		bytesData2=bytes.NewReader(bytesData)
 	}
 
-	req,_ := http.NewRequest(method,"https://api.mch.weixin.qq.com"+url,bytesData2)
+	req,err := http.NewRequest(method,"https://api.mch.weixin.qq.com"+url,bytesData2)
+	if err != nil {
+		return nil, 0, "", err
+	}
 	for i, i2 := range headers {
 		req.Header.Add(i,i2)
 	}
-	resp,_ := client.Do(req)
+	resp,err := client.Do(req)
+	if err != nil {
+		return nil, 0, "", err
+	}
 	defer resp.Body.Close()
-	body, _ := ioutil.ReadAll(resp.Body)
-	return resp.Header,resp.StatusCode,string(body)
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, 0, "", err
+	}
+	return resp.Header,resp.StatusCode,string(body),nil
 }
 func GetUrl(method string,url string,data map[string]interface{},serial_no string,mchid string,keypath string)string  {
 	bytesData, _ := json.Marshal(data)
@@ -378,7 +387,6 @@ func SetBaoCunWenBenDaoWenJian(data,fileNamem string)error  {
 }
 //读入文件
 func GetDouRuWenJian(fileNamem string)(string,error)  {
-	//_, _ = ioutil.ReadFile(fileNamem)
 	fp, err := os.OpenFile(fileNamem, os.O_CREATE|os.O_APPEND, 6) // 读写方式打开
 	if err != nil {
 		return "", err

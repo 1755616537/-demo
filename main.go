@@ -5,6 +5,7 @@ import (
 	"fmt"
 	_ "fmt"
 	"github.com/gogf/gf/encoding/gjson"
+	"io/ioutil"
 )
 
 func main() {
@@ -46,14 +47,47 @@ func main() {
 	//return
 
 	//获取平台证书
-	resbody, resHeader, err :=GongZhongHao.GetPingTaiZhengShu()
+	resBody, resHeader, err :=GongZhongHao.GetPingTaiZhengShu()
 	if err != nil {
 		fmt.Println(err.Error())
 		return
 	}
 
-	//微信JSAPI支付回调验签
-	fmt.Println(GongZhongHao.CheckSign2(gjson.New(resbody),resHeader))
+	sign:=map[string]string{}
+	//sign["timestamp"] = resHeader.Get("Wechatpay-Timestamp")
+	//sign["nonce"] = resHeader.Get("Wechatpay-Nonce")
+	//sign["body"] = resBody
+	//sign["signature"] = resHeader.Get("Wechatpay-Signature")
+	//sign["wxSerial"] = resHeader.Get("Wechatpay-Serial")
+
+	sign["timestamp"] = "1602920087"
+	sign["nonce"] = "OHCxYkIb57PvHL0s9TbXbnOkrQxjDqYD"
+	sign["body"], err = GetCeShi()
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	sign["signature"] = "VbxdX/fMx1pe2jugkcSkInrRiuw3FtpnOzkXAXBi5Tf9AjqkOizrfIGdD8Ze5aFXuhoGrR/rLAUIQGcwV+PbZuYfvVFFP52HoGT2yVTUNgtSXj+nokQgo9B8iZr1EEBG3XN6yBUdpEwzYI17UqzhJgKLZO8QLWYsjcK9POPnxupeR+RnlLoew8UGabjc51CqiuEJRLDKB/v6PhUFjkmL1HosPoLadGaTDh6UNRJKL+p1QRGoLzvHi2coY7QI20i1HHbpeLT1Iuc0oCTHBZiaRVgOKnHzmVmg+qahnWsrS3GpuPtHKqmkmRuMxgyugHHn4D4YOYFudaT4CHPQYsDAhQ=="
+	sign["wxSerial"] = "3BE8D7D58A068970391BEBD6D77640D5DE7CE668"
+	jsonResBody, err := gjson.DecodeToJson(resBody)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	//验签
+	ret, err := GongZhongHao.YanQianRuKou(jsonResBody, resHeader,sign)
+	fmt.Println("验签结果",ret,err)
+
+}
+//获取测试Body数据
+func GetCeShi()(string,error)  {
+	body, err := ioutil.ReadFile("C:\\Users\\Administrator\\OneDrive\\文本资料\\宇翔\\微信支付\\证书\\测试数据/body.txt")
+	//body, err := WeiXin.GetDouRuWenJian("C:\\Users\\Administrator\\OneDrive\\文本资料\\宇翔\\微信支付\\证书\\测试数据/body.txt")
+	if err != nil {
+		fmt.Println(err.Error())
+		return "",err
+	}
+	return string(body), nil
 }
 
 
